@@ -175,4 +175,31 @@ int sd_card_lseek(uint32_t offset);
  */
 uint32_t sd_card_fsize(void);
 
+/* *
+ * @brief `set_timestamp(o)` stamps the specify time to the file
+ *
+ * @param obj pointer to the file to be time stamped.
+ * @param year year for the file
+ * @param month month for the file
+ * @param mday day number for the file
+ * @param hour hour timestamp for the file (24-hr format)
+ * @param min minutes timestamp for the file
+ * @param sec seconds timestamp for the file
+ *
+ * @pre The SD card is mounted and a file is opened.
+ *
+ * @post The read/write pointer of the currently open file is moved to `o` bytes from the top of the file.
+ *
+ * @retval `E_NO_ERROR` if successful, else a negative error code.
+ */
+FRESULT set_file_timestamp (
+    char *obj,     /* Pointer to the file name */
+    int year,
+    int month,
+    int mday,
+    int hour,
+    int min,
+    int sec
+);
+
 #endif /* SD_CARD_H_ */

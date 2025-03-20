@@ -17,13 +17,15 @@
 #include "bsp_status_led.h"
 #include "data_converters.h"
 #include "decimation_filter.h"
-#include "demo_config.h"
 #include "sd_card.h"
 #include "sd_card_bank_ctl.h"
 #include "wav_header.h"
+#include "system_config.h"
 
 #include "bsp_pushbutton.h"
 #include "gpio.h"
+#include "DS3231_driver.h"
+#include <time.h>
 
 #ifdef TERMINAL_IO_USE_SEGGER_RTT
 #include "SEGGER_RTT.h"
@@ -52,17 +54,40 @@ static void error_handler(Status_LED_Color_t c);
 
 //system control functions
 static void initialize_system(void);
+static void setup_realtimeclock(void);
 static void power_on_audio_chain(void);
 static void power_off_audio_chain(void);
 
-static void start_recording(Wave_Header_Sample_Rate_t rate, Wave_Header_Bits_Per_Sample_t bit, SD_Card_Bank_Card_Slot_t sd_slot, int32_t duration_s);
+static void start_recording(uint8_t number_of_channel, Audio_Sample_Rate_t rate, Audio_Bits_Per_Sample_t bit, SD_Card_Bank_Card_Slot_t sd_slot, int32_t duration_s);
 static void user_pushbutton_interrupt_callback(void *cbdata);
 static void setup_user_pushbutton_interrupt(void);
 
 static bool isRecording = false;
 
+//#define FIRST_SET_RTC 1    //uncomment this to set the clock time in the setup_realtimeclock()
+
+#define DEFAULT_FILENAME "Magpie00_19000101_000000"
+char savedFileName[31] = DEFAULT_FILENAME;
+
+//==============DS3231 Related=========================
+#define OUTPUT_MSG_BUFFER_SIZE       128U
+
+ds3231_driver_t DS3231_RTC;
+static struct tm ds3231_datetime;
+static char ds3231_datetime_str[17];
+static float ds3231_temperature;
+static uint8_t output_msgBuffer[OUTPUT_MSG_BUFFER_SIZE];
+const struct tm ds3231_dateTimeDefault = {
+	.tm_year = 118U,
+	.tm_mon = 00U,
+	.tm_mday = 1U,
+	.tm_hour = 0U,
+	.tm_min = 0U,
+	.tm_sec = 0U
+};
 
 /* Public function definitions ---------------------------------------------------------------------------------------*/
+
 
 int main(void)
 {
@@ -74,11 +99,46 @@ int main(void)
 
     setup_user_pushbutton_interrupt();
 
+    setup_realtimeclock();
+
+//     printf("\n\n
+//   __  __                   _      \n
+//  |  \\/  | __ _  __ _ _ __ \(_\) ___ \n
+//  | |\\/| |/ _` |/ _` | \'_ \\| |/ _ \\\n
+//  | |  | | (_| | (_| | |_) | |  __/\n
+//  |_|  |_|\\__,_|\\__, | .__/|_|\\___|\n
+//                |___/|_|           \n
+// ");
+
+    //Get Temperature from RTC
+    if (E_NO_ERROR != DS3231_RTC.read_temperature(&ds3231_temperature)) {
+        printf("\nDS3231 read temperature error\n");
+    } else {
+        sprintf((char*)output_msgBuffer, "\n-->Temperature (C): %.2f\r\n", ds3231_temperature);
+        printf(output_msgBuffer);
+    }
+    
+    //Get Time Stamp from RTC
+    if (E_NO_ERROR != DS3231_RTC.read_datetime(&ds3231_datetime, ds3231_datetime_str)) {
+        printf("\nDS3231 read datetime error\n");
+    } else {
+        strftime((char*)output_msgBuffer, OUTPUT_MSG_BUFFER_SIZE, "\n-->DateTime: %F %TZ\r\n", &ds3231_datetime);
+        printf(output_msgBuffer);
+
+        strftime((char*)output_msgBuffer, OUTPUT_MSG_BUFFER_SIZE, "\n-->FileStampTime: %Y%m%d_%H%M%SZ\r\n", &ds3231_datetime);
+        //printf(output_msgBuffer);
+
+        //printf(ds3231_datetime_str);		
+    }
+   
+    printf("Standing by and waiting for a push from user button ...\n");
+
     const u_int32_t idle_blink_interval = 20;  //Blink blue every 2 seconds, 100ms per loop
     uint32_t loopCount = 0;
 
     while (1)
     {
+        //Idle blinking loop
          if(loopCount == idle_blink_interval)
         {
             loopCount = 0;
@@ -91,28 +151,40 @@ int main(void)
 
         if(isRecording)
         {
+            printf("Start recording ...\n");
             //Reset recording flag so we never can come in here unintentionally
             isRecording = false;
 
             // Remove callback for push button
             MXC_GPIO_RegisterCallback(&bsp_pins_user_pushbutton_cfg, NULL, NULL);
+            MXC_GPIO_DisableInt(bsp_pins_user_pushbutton_cfg.port, bsp_pins_user_pushbutton_cfg.mask);
+            NVIC_DisableIRQ(GPIO0_IRQn);
 
             status_led_set(STATUS_LED_COLOR_GREEN, TRUE);
             MXC_Delay(MXC_DELAY_MSEC(1000));
             status_led_set(STATUS_LED_COLOR_GREEN, FALSE);
-                   
+                               
 
-            //No longer uses the demo_config.h values except for the Gain
-            start_recording(WAVE_HEADER_STEREO, WAVE_HEADER_SAMPLE_RATE_384kHz,
-                            WAVE_HEADER_24_BITS_PER_SAMPLE,
-                            SD_CARD_BANK_CARD_SLOT_0,
-                            5);
+            //Get Date Time from RTC 
+            if(E_NO_ERROR != DS3231_RTC.read_datetime(&ds3231_datetime, ds3231_datetime_str))
+            {
+                sprintf(savedFileName,"%s",DEFAULT_FILENAME);
+            } else {
+                
+                sprintf(savedFileName,"%s%s","Magpie00_",ds3231_datetime_str);
+            }
+
+            start_recording(SYS_CONFIG_NUM_CHANNEL, SYS_CONFIG_SAMPLE_RATE,
+                            SYS_CONFIG_NUM_BIT_DEPTH,
+                            SYS_CONFIG_SD_CARD_SLOT_TO_USE,
+                            SYS_CONFIG_AUDIO_FILE_LEN_IN_SECONDS);
             
-            //  Re-register callback
-            MXC_GPIO_RegisterCallback(&bsp_pins_user_pushbutton_cfg, user_pushbutton_interrupt_callback, NULL);
-            // Re-enable interrupt
-            MXC_GPIO_EnableInt(bsp_pins_user_pushbutton_cfg.port, bsp_pins_user_pushbutton_cfg.mask);
-            NVIC_EnableIRQ(GPIO0_IRQn);
+            
+            printf("Re-enabling push button callback ...\n");
+
+            setup_user_pushbutton_interrupt();
+
+            printf("Standing by and waiting for a push from user button ...\n");
         }
     }
 }
@@ -137,7 +209,8 @@ void write_wav_file(Wave_Header_Attributes_t *wav_attr, uint32_t file_len_secs)
     // derive the file name from the input parameters
     sprintf(
         file_name_buff,
-        "demo_%dkHz_%d_bit_%d_channel.wav",
+        "%s_%dkHz_%d_bit_%d_channel.wav",
+        savedFileName,        
         wav_attr->sample_rate / 1000,
         wav_attr->bits_per_sample,
         wav_attr->num_channels);
@@ -303,21 +376,21 @@ void write_wav_file(Wave_Header_Attributes_t *wav_attr, uint32_t file_len_secs)
             else // num-channels must be MONO
             {
                 // hack- consume the buffer we're not using so we don't get overruns, TODO change this
-                audio_dma_consume_buffer(DEMO_CONFIG_CHANNEL_TO_USE_FOR_MONO_MODE ? AUDIO_CHANNEL_0 : AUDIO_CHANNEL_1);
+                audio_dma_consume_buffer(SYS_CONFIG_CHANNEL_TO_USE_FOR_MONO_MODE ? AUDIO_CHANNEL_0 : AUDIO_CHANNEL_1);
 
                 if (its_the_special_case_of_384kHz)
                 {
                     if (wav_attr->bits_per_sample == AUDIO_BIT_DEPTH_24_BITS_PER_SAMPLE)
                     {
                         data_converters_i24_swap_endianness(
-                            audio_dma_consume_buffer(DEMO_CONFIG_CHANNEL_TO_USE_FOR_MONO_MODE),
+                            audio_dma_consume_buffer(SYS_CONFIG_CHANNEL_TO_USE_FOR_MONO_MODE),
                             next_chunk_to_write_to,
                             AUDIO_DMA_BUFF_LEN_IN_SAMPS);
                     }
                     else // it's 384k 16 bits
                     {
                         data_converters_i24_to_q15_with_endian_swap(
-                            audio_dma_consume_buffer(DEMO_CONFIG_CHANNEL_TO_USE_FOR_MONO_MODE),
+                            audio_dma_consume_buffer(SYS_CONFIG_CHANNEL_TO_USE_FOR_MONO_MODE),
                             (q15_t *)next_chunk_to_write_to,
                             AUDIO_DMA_BUFF_LEN_IN_SAMPS);
                     }
@@ -326,7 +399,7 @@ void write_wav_file(Wave_Header_Attributes_t *wav_attr, uint32_t file_len_secs)
                 {
                     // all sample rates other than 384k are filtered, so we need to swap endianness and also expand to 32 bit words as expected by the filters
                     data_converters_i24_to_q31_with_endian_swap(
-                        audio_dma_consume_buffer(DEMO_CONFIG_CHANNEL_TO_USE_FOR_MONO_MODE),
+                        audio_dma_consume_buffer(SYS_CONFIG_CHANNEL_TO_USE_FOR_MONO_MODE),
                         (q31_t *)workspace_byte_pool,
                         AUDIO_DMA_BUFF_LEN_IN_SAMPS);
 
@@ -336,7 +409,7 @@ void write_wav_file(Wave_Header_Attributes_t *wav_attr, uint32_t file_len_secs)
                         (q31_t *)workspace_byte_pool,
                         (q31_t *)workspace_byte_pool, // decimating in-place
                         AUDIO_DMA_BUFF_LEN_IN_SAMPS,
-                        DEMO_CONFIG_CHANNEL_TO_USE_FOR_MONO_MODE);
+                        SYS_CONFIG_CHANNEL_TO_USE_FOR_MONO_MODE);
 
                     // workspace_buff starting at index zero now has the decimated version of this DMA chunk
 
@@ -365,6 +438,12 @@ void write_wav_file(Wave_Header_Attributes_t *wav_attr, uint32_t file_len_secs)
             }
 
             num_dma_blocks_consumed += 1;
+
+            //Blink Green LED while recording
+            if(num_dma_blocks_consumed % 3 == 0)
+            {
+                status_led_toggle(STATUS_LED_COLOR_GREEN);
+            }
         }
     }
 
@@ -412,6 +491,14 @@ void write_wav_file(Wave_Header_Attributes_t *wav_attr, uint32_t file_len_secs)
     else
     {
         printf("[SUCCESS]--> SD card fclose\n");
+
+        //Generate time stamp
+	    set_file_timestamp(file_name_buff, ds3231_datetime.tm_year + 1900, 
+        ds3231_datetime.tm_mon + 1, 
+        ds3231_datetime.tm_mday, 
+        ds3231_datetime.tm_hour,
+        ds3231_datetime.tm_min, 
+        ds3231_datetime.tm_sec);
     }
 
     printf("[SUCCESS]--> Wrote file %s\n", file_name_buff);
@@ -448,29 +535,6 @@ static void setup_user_pushbutton_interrupt(void)
     NVIC_EnableIRQ(GPIO0_IRQn);
 }
 
-
-static void user_pushbutton_interrupt_callback(void *cbdata)
-{
-    // Get and clear interrupt flags
-    uint32_t status = MXC_GPIO_GetFlags(bsp_pins_user_pushbutton_cfg.port);
-    MXC_GPIO_ClearFlags(bsp_pins_user_pushbutton_cfg.port, status);
-
-    // Disable interrupt temporarily
-    MXC_GPIO_DisableInt(bsp_pins_user_pushbutton_cfg.port, bsp_pins_user_pushbutton_cfg.mask);
-
-    NVIC_DisableIRQ(GPIO0_IRQn);
-
-    if(user_pushbutton_state() == (BUTTON_STATE_JUST_PRESSED||BUTTON_STATE_PRESSED))
-    {
-        LED_cascade_left();
-        //Set recording flag to true
-        isRecording = true;
-    }
-
-    // Re-enable interrupt
-    MXC_GPIO_EnableInt(bsp_pins_user_pushbutton_cfg.port, bsp_pins_user_pushbutton_cfg.mask);
-    NVIC_EnableIRQ(GPIO0_IRQn);
-}
 
 static void LED_cascade_right(void) //R->G->B
 {
@@ -528,7 +592,7 @@ static void initialize_system(void)
         printf("[SUCCESS]--> DMA init\n");
     }
 
-    if (bsp_3v3_i2c_init() != E_NO_ERROR)
+    if (bsp_3v3_i2c_init() != E_NO_ERROR)   //This allows I2C connecting to DS3231, SD, SD_CTL
     {
         printf("[ERROR]--> I2C init\n");
         error_handler(STATUS_LED_COLOR_RED);
@@ -538,7 +602,7 @@ static void initialize_system(void)
         printf("[SUCCESS]--> I2C init\n");
     }
 
-    if (bsp_1v8_i2c_init() != E_NO_ERROR)
+    if (bsp_1v8_i2c_init() != E_NO_ERROR)  //This allows I2C connecting to Bosch Sensor, Fuel Gauge, LDO, AFE
     {
         printf("[ERROR]--> 1V8 I2C init\n");
         error_handler(STATUS_LED_COLOR_RED);
@@ -547,6 +611,45 @@ static void initialize_system(void)
     {
         printf("[SUCCESS]--> 1V8 I2C init\n");
     }   
+}
+
+static void setup_realtimeclock()
+{
+    DS3231_RTC = DS3231_Open();
+
+    if(E_NO_ERROR != DS3231_RTC.init(bsp_i2c_3v3_i2c_handle))
+    {
+      printf("[ERROR] --> Unable to initialize RTC driver.\n");
+      error_handler(STATUS_LED_COLOR_RED);
+    }
+
+    #ifdef FIRST_SET_RTC
+	// //Set Date Time to something
+	//Year is always Year - 1900
+	//Month is 0-11 so subtract 1 from the month you want to set
+	//Time is in UTC so set appropriately
+	// hour is 0-23
+	// min is 0-59
+	// sec is 0-59
+	struct tm newTime = {
+		.tm_year = 2025 - 1900U,
+		.tm_mon =  3 - 1U,
+		.tm_mday = 20,
+		.tm_hour = 16,
+		.tm_min = 30,
+		.tm_sec = 0
+	};
+
+	
+	//Set Date Time on RTC. 
+	
+	if (E_NO_ERROR != DS3231_RTC.set_datetime(&newTime)) {
+		printf("\nDS3231 set time error\n");
+	} else {
+		strftime((char*)output_msgBuffer, OUTPUT_MSG_BUFFER_SIZE, "\n-->Set DateTime: %F %TZ\r\n", &newTime);
+		printf(output_msgBuffer);
+	}
+	#endif
 }
 
 static void power_on_audio_chain(void)
@@ -580,29 +683,29 @@ static void power_on_audio_chain(void)
         printf("[SUCCESS]--> AFE Control CH1 EN\n");
     }
 
-    if (afe_control_set_gain(AUDIO_CHANNEL_0, DEMO_CONFIG_AUDIO_GAIN) != E_NO_ERROR)
+    if (afe_control_set_gain(AUDIO_CHANNEL_0, SYS_CONFIG_AUDIO0_GAIN) != E_NO_ERROR)
     {
-        printf("[ERROR]--> AFE Control CH0 gain set to %ddB\n", DEMO_CONFIG_AUDIO_GAIN);
+        printf("[ERROR]--> AFE Control CH0 gain set to %ddB\n", SYS_CONFIG_AUDIO0_GAIN);
         error_handler(STATUS_LED_COLOR_RED);
     }
     else
     {
-        printf("[SUCCESS]--> AFE Control CH0 gain set to %ddB\n", DEMO_CONFIG_AUDIO_GAIN);
+        printf("[SUCCESS]--> AFE Control CH0 gain set to %ddB\n", SYS_CONFIG_AUDIO0_GAIN);
     }
-    if (afe_control_set_gain(AUDIO_CHANNEL_1, DEMO_CONFIG_AUDIO_GAIN) != E_NO_ERROR)
+    if (afe_control_set_gain(AUDIO_CHANNEL_1, SYS_CONFIG_AUDIO1_GAIN) != E_NO_ERROR)
     {
-        printf("[ERROR]--> AFE Control CH1 gain set to %ddB\n", DEMO_CONFIG_AUDIO_GAIN);
+        printf("[ERROR]--> AFE Control CH1 gain set to %ddB\n", SYS_CONFIG_AUDIO1_GAIN);
         error_handler(STATUS_LED_COLOR_RED);
     }
     else
     {
-        printf("[SUCCESS]--> AFE Control CH1 gain set to %ddB\n", DEMO_CONFIG_AUDIO_GAIN);
+        printf("[SUCCESS]--> AFE Control CH1 gain set to %ddB\n", SYS_CONFIG_AUDIO1_GAIN);
     }
 
     Audio_Gain_t readback_gain = afe_control_get_gain(AUDIO_CHANNEL_0);
-    if (readback_gain != DEMO_CONFIG_AUDIO_GAIN)
+    if (readback_gain != SYS_CONFIG_AUDIO0_GAIN)
     {
-        printf("[ERROR]--> AFE CH0 set (%ddB) and get (%ddB) gain don't match\n", DEMO_CONFIG_AUDIO_GAIN, readback_gain);
+        printf("[ERROR]--> AFE CH0 set (%ddB) and get (%ddB) gain don't match\n", SYS_CONFIG_AUDIO0_GAIN, readback_gain);
         error_handler(STATUS_LED_COLOR_RED);
     }
     else
@@ -610,9 +713,9 @@ static void power_on_audio_chain(void)
         printf("[SUCCESS]--> AFE CH0 get-gain matches AFE set-gain\n");
     }
     readback_gain = afe_control_get_gain(AUDIO_CHANNEL_1);
-    if (readback_gain != DEMO_CONFIG_AUDIO_GAIN)
+    if (readback_gain != SYS_CONFIG_AUDIO1_GAIN)
     {
-        printf("[ERROR]--> AFE CH1 set (%ddB) and get (%ddB) gain don't match\n", DEMO_CONFIG_AUDIO_GAIN, readback_gain);
+        printf("[ERROR]--> AFE CH1 set (%ddB) and get (%ddB) gain don't match\n", SYS_CONFIG_AUDIO1_GAIN, readback_gain);
         error_handler(STATUS_LED_COLOR_RED);
     }
     else
@@ -624,7 +727,7 @@ static void power_on_audio_chain(void)
 static void power_off_audio_chain(void)
 {
 
-    if (afe_control_disable(AFE_CONTROL_CHANNEL_0) != E_NO_ERROR)
+    if (afe_control_disable(AUDIO_CHANNEL_0) != E_NO_ERROR)
     {
         printf("[ERROR]--> AFE Control CH0 DIS\n");
         error_handler(STATUS_LED_COLOR_RED);
@@ -634,7 +737,7 @@ static void power_off_audio_chain(void)
         printf("[SUCCESS]--> AFE Control CH0 DIS\n");
     }
 
-    if (afe_control_disable(AFE_CONTROL_CHANNEL_1) != E_NO_ERROR)
+    if (afe_control_disable(AUDIO_CHANNEL_1) != E_NO_ERROR)
     {
         printf("[ERROR]--> AFE Control CH1 DIS\n");
         error_handler(STATUS_LED_COLOR_RED);
@@ -648,9 +751,11 @@ static void power_off_audio_chain(void)
 }
 
 static void start_recording(uint8_t number_of_channel, 
-                            Wave_Header_Sample_Rate_t rate, Wave_Header_Bits_Per_Sample_t bit, 
+    Audio_Sample_Rate_t rate, Audio_Bits_Per_Sample_t bit, 
                             SD_Card_Bank_Card_Slot_t sd_slot, int32_t duration_s)
 {
+    power_on_audio_chain();
+
     if (sd_card_bank_ctl_init() != E_NO_ERROR)
     {
         printf("[ERROR]--> SD card bank ctl init\n");
@@ -721,4 +826,29 @@ static void start_recording(uint8_t number_of_channel,
     printf("\n[SUCCESS]--> All files recorded, shutting down\n");
 
     power_off_audio_chain();
+}
+
+///////////////////////////ISP CALL BACKS ////////////////////////////////////
+
+static void user_pushbutton_interrupt_callback(void *cbdata)
+{
+    // Get and clear interrupt flags
+    uint32_t status = MXC_GPIO_GetFlags(bsp_pins_user_pushbutton_cfg.port);
+    MXC_GPIO_ClearFlags(bsp_pins_user_pushbutton_cfg.port, status);
+
+    // Disable interrupt temporarily
+    MXC_GPIO_DisableInt(bsp_pins_user_pushbutton_cfg.port, bsp_pins_user_pushbutton_cfg.mask);
+
+    NVIC_DisableIRQ(GPIO0_IRQn);
+
+    if(user_pushbutton_state() == (BUTTON_STATE_JUST_PRESSED||BUTTON_STATE_PRESSED))
+    {
+        LED_cascade_left();
+        //Set recording flag to true
+        isRecording = true;
+    }
+
+    // Re-enable interrupt
+    MXC_GPIO_EnableInt(bsp_pins_user_pushbutton_cfg.port, bsp_pins_user_pushbutton_cfg.mask);
+    NVIC_EnableIRQ(GPIO0_IRQn);
 }

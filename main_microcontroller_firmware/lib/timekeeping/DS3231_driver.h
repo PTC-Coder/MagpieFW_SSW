@@ -18,6 +18,7 @@
 #include <stdbool.h>
 #include "i2c.h"
 #include "mxc_delay.h"
+#include <time.h>
 
 // ------------------------------------------------------------------------
 // ------------------------------- Contants -------------------------------
@@ -50,6 +51,17 @@ typedef struct {
     int (*read_temperature)(void *temp);
     int (*set_datetime)(struct tm *newTime);
 } ds3231_driver_t;
+
+/****************** TypeDef ******************/
+/**
+ * @brief Enumerated DS3231 I2C error mode.
+ */
+typedef enum{
+    DS3231_I2C_NO_ERROR,
+	MCU_MASTER_I2C_INIT_ERROR,
+    DS3231_I2C_INIT_ERROR,
+    DS3231_I2C_FREQSET_ERROR
+} DS3231_i2cError;
 // --------------------- Global Variable Declarations --------------------- 
 
 #ifdef USE_DEBUG_MENU
@@ -67,7 +79,7 @@ void DS3231_setTestAlarm(void);
  *
  * @return I2C_SensorDriver instance
  */
-ds3231_driver_t DS3231_Open();
+ds3231_driver_t DS3231_Open(void);
 uint32_t ds3231_mx_init(mxc_i2c_regs_t *i2c);
 uint32_t ds3231_read_datetime(void *buff, void *strbuff);
 uint32_t ds3231_read_temperature(void *temp);

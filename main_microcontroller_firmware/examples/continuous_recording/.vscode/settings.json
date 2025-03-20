@@ -73,7 +73,8 @@
         "cstdio": "cpp",
         "data_converters.h": "c",
         "arm_math.h": "c",
-        "afe_control.h": "c"
+        "afe_control.h": "c",
+        "sd_card.h": "c"
     },
     "cfs.configureWorkspace": "No"
 }

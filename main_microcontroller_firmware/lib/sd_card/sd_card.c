@@ -137,3 +137,21 @@ uint32_t sd_card_fsize()
 {
     return f_size(&SD_file);
 }
+
+FRESULT set_file_timestamp (
+    char *obj,     /* Pointer to the file name */
+    int year,
+    int month,
+    int mday,
+    int hour,
+    int min,
+    int sec
+)
+{
+    FILINFO fno;
+
+    fno.fdate = (WORD)(((year - 1980) * 512U) | month * 32U | mday);
+    fno.ftime = (WORD)(hour * 2048U | min * 32U | sec / 2U);
+
+    return f_utime(obj, &fno);
+}
