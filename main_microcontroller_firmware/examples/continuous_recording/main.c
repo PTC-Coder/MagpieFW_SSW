@@ -634,9 +634,9 @@ static void setup_realtimeclock()
 	struct tm newTime = {
 		.tm_year = 2025 - 1900U,
 		.tm_mon =  3 - 1U,
-		.tm_mday = 20,
-		.tm_hour = 16,
-		.tm_min = 30,
+		.tm_mday = 31,
+		.tm_hour = 10,
+		.tm_min = 01,
 		.tm_sec = 0
 	};
 
