@@ -688,7 +688,7 @@ ds3231_driver_t DS3231_Open(void)
     return SD;
 }
 
-/*==================== Implementation of Functions Linke To Driver Function Pointers ===============*/
+/*==================== Implementation of Functions Linked To Driver Function Pointers ===============*/
 
 uint32_t ds3231_mx_init(mxc_i2c_regs_t *i2c)
 {

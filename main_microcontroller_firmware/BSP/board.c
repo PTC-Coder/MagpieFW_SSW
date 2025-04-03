@@ -34,8 +34,11 @@ int Board_Init(void)
 
     bsp_spixf_deinit();
 
-    // power down the LDOs
+    // Configure RTC interrupt pin so it's on 3V3 domain.
     MXC_GPIO_Config(&bsp_pins_ldo_en_cfg);
+
+    // power down the LDOs
+    MXC_GPIO_Config(&bsp_pins_rtc_int_cfg);
     bsp_power_off_LDOs();
 
     // initialize the status LEDs

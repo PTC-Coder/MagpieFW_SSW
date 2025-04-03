@@ -9,6 +9,12 @@
 #ifndef BSP_PUSHBUTTON_H_INCLUDED__
 #define BSP_PUSHBUTTON_H_INCLUDED__
 
+/* Defines --------------------------------------------------------------------------------------- */
+#define USRBTN_TIMER_ID MXC_TMR5  // Timer 5
+#define USRBTN_TIMER_IRQn TMR5_IRQn
+
+#define DEBOUNCE_DELAY_MS 2  // 2 ms debounce delay
+
 /* Public enumerations -----------------------------------------------------------------------------------------------*/
 
 typedef enum
@@ -38,11 +44,11 @@ typedef enum
 void pushbuttons_init(void);
 
 /**
- * @brief `user_pushbutton_state()` is the enumerated state of the user pushbutton.
+ * @brief `get_user_pushbutton_state()` is the enumerated state of the user pushbutton.
  *
- * @retval the enumerated state of the pushbutton.
+ * @retval get the enumerated state of the pushbutton.
  */
-Button_State_t user_pushbutton_state(void);
+void get_user_pushbutton_state(void);
 
 /**
  * @brief `ble_enable_pushbutton_state()` is the enumerated state of the BLE enable pushbutton.

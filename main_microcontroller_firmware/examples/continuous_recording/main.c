@@ -62,7 +62,6 @@ static void start_recording(uint8_t number_of_channel, Audio_Sample_Rate_t rate,
 static void user_pushbutton_interrupt_callback(void *cbdata);
 static void setup_user_pushbutton_interrupt(void);
 
-static bool isRecording = false;
 
 //#define FIRST_SET_RTC 1    //uncomment this to set the clock time in the setup_realtimeclock()
 
@@ -149,16 +148,16 @@ int main(void)
         MXC_Delay(MXC_DELAY_MSEC(100));
         loopCount++;
 
-        if(isRecording)
+        if(button_)
         {
             printf("Start recording ...\n");
             //Reset recording flag so we never can come in here unintentionally
             isRecording = false;
 
             // Remove callback for push button
-            MXC_GPIO_RegisterCallback(&bsp_pins_user_pushbutton_cfg, NULL, NULL);
-            MXC_GPIO_DisableInt(bsp_pins_user_pushbutton_cfg.port, bsp_pins_user_pushbutton_cfg.mask);
-            NVIC_DisableIRQ(GPIO0_IRQn);
+            // MXC_GPIO_RegisterCallback(&bsp_pins_user_pushbutton_cfg, NULL, NULL);
+            // MXC_GPIO_DisableInt(bsp_pins_user_pushbutton_cfg.port, bsp_pins_user_pushbutton_cfg.mask);
+            // NVIC_DisableIRQ(GPIO0_IRQn);
 
             status_led_set(STATUS_LED_COLOR_GREEN, TRUE);
             MXC_Delay(MXC_DELAY_MSEC(1000));
@@ -172,14 +171,16 @@ int main(void)
             } else {
                 
                 sprintf(savedFileName,"%s%s","Magpie00_",ds3231_datetime_str);
+                printf("File to be saved: %s /n", savedFileName);
             }
 
-            start_recording(SYS_CONFIG_NUM_CHANNEL, SYS_CONFIG_SAMPLE_RATE,
-                            SYS_CONFIG_NUM_BIT_DEPTH,
-                            SYS_CONFIG_SD_CARD_SLOT_TO_USE,
-                            SYS_CONFIG_AUDIO_FILE_LEN_IN_SECONDS);
+            // start_recording(SYS_CONFIG_NUM_CHANNEL, SYS_CONFIG_SAMPLE_RATE,
+            //                 SYS_CONFIG_NUM_BIT_DEPTH,
+            //                 SYS_CONFIG_SD_CARD_SLOT_TO_USE,
+            //                 SYS_CONFIG_AUDIO_FILE_LEN_IN_SECONDS);
             
             
+            printf("Recording Done ...\n");
             printf("Re-enabling push button callback ...\n");
 
             setup_user_pushbutton_interrupt();
@@ -528,7 +529,7 @@ static void setup_user_pushbutton_interrupt(void)
     // Configure for falling edge detection (trigger on button press)
     MXC_GPIO_IntConfig(&bsp_pins_user_pushbutton_cfg, MXC_GPIO_INT_FALLING);
 
-    // Enable interrupt
+     // Enable interrupt
     MXC_GPIO_EnableInt(bsp_pins_user_pushbutton_cfg.port, bsp_pins_user_pushbutton_cfg.mask);
     // Enable global interrupts
     //NVIC_EnableIRQ(MXC_GPIO_GET_IRQ(MXC_GPIO_GET_IDX(bsp_pins_user_pushbutton_cfg.mask)));
@@ -840,13 +841,14 @@ static void user_pushbutton_interrupt_callback(void *cbdata)
     MXC_GPIO_DisableInt(bsp_pins_user_pushbutton_cfg.port, bsp_pins_user_pushbutton_cfg.mask);
 
     NVIC_DisableIRQ(GPIO0_IRQn);
+    uint8_t button_state = user_pushbutton_state();
 
-    if(user_pushbutton_state() == (BUTTON_STATE_JUST_PRESSED||BUTTON_STATE_PRESSED))
-    {
+       if(button_state == (BUTTON_STATE_JUST_PRESSED)||(button_state == BUTTON_STATE_PRESSED))
+     {
         LED_cascade_left();
         //Set recording flag to true
         isRecording = true;
-    }
+     }
 
     // Re-enable interrupt
     MXC_GPIO_EnableInt(bsp_pins_user_pushbutton_cfg.port, bsp_pins_user_pushbutton_cfg.mask);

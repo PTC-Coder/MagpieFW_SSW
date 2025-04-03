@@ -46,10 +46,10 @@ static uint8_t ds3231_txCount;           // Number of bytes to write
  * @brief Structure with sensor function pointers
  */
 typedef struct {
-    int (*init)(mxc_i2c_regs_t *i2c); ///< Pointer to
-    int (*read_datetime)(void *buff, void *strbuff);
-    int (*read_temperature)(void *temp);
-    int (*set_datetime)(struct tm *newTime);
+    uint32_t (*init)(mxc_i2c_regs_t *i2c); ///< Pointer to
+    uint32_t (*read_datetime)(void *buff, void *strbuff);
+    uint32_t (*read_temperature)(void *temp);
+    uint32_t (*set_datetime)(struct tm *newTime);
 } ds3231_driver_t;
 
 /****************** TypeDef ******************/
