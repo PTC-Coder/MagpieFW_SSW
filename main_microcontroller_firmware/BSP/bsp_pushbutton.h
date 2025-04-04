@@ -48,7 +48,7 @@ void pushbuttons_init(void);
  *
  * @retval get the enumerated state of the pushbutton.
  */
-void get_user_pushbutton_state(void);
+Button_State_t get_user_pushbutton_state(void);
 
 /**
  * @brief `ble_enable_pushbutton_state()` is the enumerated state of the BLE enable pushbutton.
@@ -56,5 +56,11 @@ void get_user_pushbutton_state(void);
  * @retval the enumerated state of the pushbutton.
  */
 Button_State_t ble_enable_pushbutton_state(void);
+
+/**
+ * @brief `start_user_btn_debounceTimer()` is to start a timer after the user button is pushed.
+ *
+ */
+void start_user_btn_debounceTimer(void);
 
 #endif

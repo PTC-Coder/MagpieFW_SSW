@@ -8,8 +8,10 @@
 #include "bsp_pushbutton.h"
 #include "mxc_delay.h"
 #include "tmr.h"
+#include "nvic_table.h"
 
 /* Public function definitions ---------------------------------------------------------------------------------------*/
+static void usr_btn_debounce_timer_handler(mxc_tmr_regs_t *tmr, int channel);
 
 static bool last_user_button_state = false;
 static bool last_ble_en_button_state = false;
@@ -28,10 +30,9 @@ void pushbuttons_init()
 
 }
 
-void get_user_pushbutton_state()  //This will set the oneshot timer in motion
+Button_State_t get_user_pushbutton_state()  //This will set the oneshot timer in motion
 {
-    bool this_button_state = false;
-    
+    bool this_button_state = user_button_pressed;
     
     Button_State_t retval;
 
@@ -47,7 +48,7 @@ void get_user_pushbutton_state()  //This will set the oneshot timer in motion
     {
         retval = BUTTON_STATE_JUST_RELEASED;
     }
-    else
+    else  //false in both last stae and current state
     {
         retval = BUTTON_STATE_NOT_PRESSED;
     }
@@ -57,10 +58,12 @@ void get_user_pushbutton_state()  //This will set the oneshot timer in motion
     return retval;
 }
 
-void setup_oneShotTimer(void)
+void start_user_btn_debounceTimer(void)
 {
-    uint32_t timerFreq = MXC_TMR_GetFrequency(USRBTN_TIMER_ID);  // Get Timer clock frequency
-    uint32_t debounceTicks = (timerFreq / 1000) * DEBOUNCE_DELAY_MS; // Calculate timer ticks
+    MXC_NVIC_SetVector(USRBTN_TIMER_IRQn, usr_btn_debounce_timer_handler);
+    NVIC_EnableIRQ(USRBTN_TIMER_IRQn);
+
+    uint32_t debounceTicks = PeripheralClock / (128 * 1000) * DEBOUNCE_DELAY_MS; // Calculate timer ticks
 
     MXC_TMR_Shutdown(USRBTN_TIMER_ID);
 
@@ -110,8 +113,8 @@ Button_State_t ble_enable_pushbutton_state()
 /*************************** Timer Handler ************************************ */
 
 //this happens after some ms of the debounce time specified
-void usr_btn_debounce_timer_handler(mxc_tmr_regs_t *tmr, int channel)  
-{
+static void usr_btn_debounce_timer_handler(mxc_tmr_regs_t *tmr, int channel)  
+{    
     // Stop timer
     MXC_TMR_ClearFlags(USRBTN_TIMER_ID);
 
@@ -122,8 +125,8 @@ void usr_btn_debounce_timer_handler(mxc_tmr_regs_t *tmr, int channel)
     else
     {
         user_button_pressed = false;
-    }
-        
+    }   
+    printf("Timer handler fired\n");     
 }
 
 /******************************************************************************/
@@ -134,5 +137,11 @@ void usr_btn_debounce_timer_handler(mxc_tmr_regs_t *tmr, int channel)
 __weak void GPIO0_IRQHandler(void)
 {
     MXC_GPIO_Handler(MXC_GPIO_GET_IDX(MXC_GPIO0));
+}
+
+__weak void TMR5_IRQHandler(void)
+{
+    NVIC_DisableIRQ(TMR5_IRQn);
+    NVIC_ClearPendingIRQ(TMR5_IRQn);
 }
 
