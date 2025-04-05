@@ -75,7 +75,9 @@
         "arm_math.h": "c",
         "afe_control.h": "c",
         "sd_card.h": "c",
-        "gpio.h": "c"
+        "gpio.h": "c",
+        "bsp_pushbutton.h": "c",
+        "board.h": "c"
     },
     "cfs.configureWorkspace": "No"
 }

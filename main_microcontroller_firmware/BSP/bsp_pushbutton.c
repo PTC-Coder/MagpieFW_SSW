@@ -10,8 +10,10 @@
 #include "tmr.h"
 #include "nvic_table.h"
 
+#include <stdio.h>
+
 /* Public function definitions ---------------------------------------------------------------------------------------*/
-static void usr_btn_debounce_timer_handler(mxc_tmr_regs_t *tmr, int channel);
+static void usr_btn_debounce_timer_handler(void);
 
 static bool last_user_button_state = false;
 static bool last_ble_en_button_state = false;
@@ -55,6 +57,9 @@ Button_State_t get_user_pushbutton_state()  //This will set the oneshot timer in
 
     last_user_button_state = this_button_state;
 
+    //reset button state
+    user_button_pressed = false;
+
     return retval;
 }
 
@@ -71,6 +76,11 @@ void start_user_btn_debounceTimer(void)
     usr_tmr_cfg.mode = TMR_MODE_ONESHOT;
     usr_tmr_cfg.cmp_cnt = debounceTicks;
     usr_tmr_cfg.pol = 0;
+
+    MXC_SYS_Reset_Periph(MXC_SYS_RESET_TIMER5);
+    while (MXC_GCR->rstr0 & MXC_F_GCR_RSTR0_TIMER5) {}
+    MXC_SYS_ClockEnable(MXC_SYS_PERIPH_CLOCK_T5);
+    MXC_GPIO_Config(&gpio_cfg_tmr5);
 
     MXC_TMR_Init(USRBTN_TIMER_ID, &usr_tmr_cfg);
     MXC_TMR_Start(USRBTN_TIMER_ID);
@@ -113,7 +123,7 @@ Button_State_t ble_enable_pushbutton_state()
 /*************************** Timer Handler ************************************ */
 
 //this happens after some ms of the debounce time specified
-static void usr_btn_debounce_timer_handler(mxc_tmr_regs_t *tmr, int channel)  
+static void usr_btn_debounce_timer_handler()  
 {    
     // Stop timer
     MXC_TMR_ClearFlags(USRBTN_TIMER_ID);
@@ -139,9 +149,9 @@ __weak void GPIO0_IRQHandler(void)
     MXC_GPIO_Handler(MXC_GPIO_GET_IDX(MXC_GPIO0));
 }
 
-__weak void TMR5_IRQHandler(void)
-{
-    NVIC_DisableIRQ(TMR5_IRQn);
-    NVIC_ClearPendingIRQ(TMR5_IRQn);
-}
+// __weak void TMR5_IRQHandler(void)
+// {
+//     NVIC_DisableIRQ(TMR5_IRQn);
+//     NVIC_ClearPendingIRQ(TMR5_IRQn);
+// }
 

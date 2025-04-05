@@ -27,9 +27,19 @@
 #include "DS3231_driver.h"
 #include <time.h>
 
+// #include "mxc_device.h"
+// #include "mxc_sys.h"
+// #include "nvic_table.h"
+// #include "tmr.h"
+
 #ifdef TERMINAL_IO_USE_SEGGER_RTT
 #include "SEGGER_RTT.h"
 #endif
+
+// // Parameters for One-shot timer
+// #define INTERVAL_TIME_OST 5 // (ms)
+// #define OST_TIMER MXC_TMR5 // Can be MXC_TMR0 through MXC_TMR5
+// #define OST_TIMER_IRQn TMR5_IRQn
 
 /* Private function declarations -------------------------------------------------------------------------------------*/
 
@@ -65,7 +75,9 @@ static void start_recording(uint8_t number_of_channel, Audio_Sample_Rate_t rate,
 static void user_pushbutton_interrupt_callback(void *cbdata);
 static void setup_user_pushbutton_interrupt(void);
 
-static bool isRecording = false;
+void OneshotTimerHandler(void);
+void OneshotTimer(void);
+
 
 //#define FIRST_SET_RTC 1    //uncomment this to set the clock time in the setup_realtimeclock()
 
@@ -104,14 +116,18 @@ int main(void)
 
     setup_realtimeclock();
 
-//     printf("\n\n
-//   __  __                   _      \n
-//  |  \\/  | __ _  __ _ _ __ \(_\) ___ \n
-//  | |\\/| |/ _` |/ _` | \'_ \\| |/ _ \\\n
-//  | |  | | (_| | (_| | |_) | |  __/\n
-//  |_|  |_|\\__,_|\\__, | .__/|_|\\___|\n
-//                |___/|_|           \n
-// ");
+    printf("\n\n==================================\n");
+    printf("   Cornell Lab of Ornithology     \n");
+    printf("       K. Lisa Yang Center       \n");
+    printf("   For Conservation Bioacoustics    \n");
+    printf("==================================\n");
+    printf(" __  __                   _      \n");
+    printf("|  \\/  | __ _  __ _ _ __ (_) ___ \n");
+    printf("| |\\/| |/ _` |/ _` | \'_ \\| |/ _ \\\n");
+    printf("| |  | | (_| | (_| | |_) | |  __/\n");
+    printf("|_|  |_|\\__,_|\\__, | .__/|_|\\___|\n");
+    printf("              |___/|_|           \n\n");
+    printf("==================================\n\n\n");
 
     //Get Temperature from RTC
     if (E_NO_ERROR != DS3231_RTC.read_temperature(&ds3231_temperature)) {
@@ -136,6 +152,10 @@ int main(void)
    
     printf("Standing by and waiting for a push from user button ...\n");
 
+    // MXC_NVIC_SetVector(OST_TIMER_IRQn, OneshotTimerHandler);
+    // NVIC_EnableIRQ(OST_TIMER_IRQn);
+    // OneshotTimer();
+
     const u_int32_t idle_blink_interval = 20;  //Blink blue every 2 seconds, 100ms per loop
     uint32_t loopCount = 0;
 
@@ -151,6 +171,8 @@ int main(void)
         }
         MXC_Delay(MXC_DELAY_MSEC(100));
         loopCount++;
+
+        
 
         uint8_t button_state = get_user_pushbutton_state();
 
@@ -179,11 +201,9 @@ int main(void)
                 printf("File to be saved: %s /n", savedFileName);
             }
 
-            // Enable interrupt
-            MXC_GPIO_EnableInt(bsp_pins_user_pushbutton_cfg.port, bsp_pins_user_pushbutton_cfg.mask);
-            // Enable global interrupts
-            //NVIC_EnableIRQ(MXC_GPIO_GET_IRQ(MXC_GPIO_GET_IDX(bsp_pins_user_pushbutton_cfg.mask)));
-            NVIC_EnableIRQ(GPIO0_IRQn);
+            //re-enable button
+            pushbuttons_init();
+            setup_user_pushbutton_interrupt();
 
             // start_recording(SYS_CONFIG_NUM_CHANNEL, SYS_CONFIG_SAMPLE_RATE,
             //                 SYS_CONFIG_NUM_BIT_DEPTH,
@@ -855,3 +875,44 @@ static void user_pushbutton_interrupt_callback(void *cbdata)
     start_user_btn_debounceTimer();
     
 }
+
+// void OneshotTimerHandler()
+// {
+//     // Clear interrupt
+//     MXC_TMR_ClearFlags(OST_TIMER);
+//     printf("One Shot Time fired \n");
+// }
+
+// void OneshotTimer()
+// {
+//     // Declare variables
+//     mxc_tmr_cfg_t tmr;
+//     uint32_t periodTicks = PeripheralClock / (128*1000) * INTERVAL_TIME_OST;
+//     /*
+//     Steps for configuring a timer for PWM mode:
+//     1. Disable the timer
+//     2. Set the prescale value
+//     3  Configure the timer for continuous mode
+//     4. Set polarity, timer parameters
+//     5. Enable Timer
+//     */
+
+//     MXC_TMR_Shutdown(OST_TIMER);
+
+//     tmr.pres = TMR_PRES_128;
+//     tmr.mode = TMR_MODE_ONESHOT;
+//     tmr.cmp_cnt = periodTicks;
+//     tmr.pol = 0;
+
+//     MXC_SYS_Reset_Periph(MXC_SYS_RESET_TIMER5);
+//     while (MXC_GCR->rstr0 & MXC_F_GCR_RSTR0_TIMER5) {}
+//     MXC_SYS_ClockEnable(MXC_SYS_PERIPH_CLOCK_T5);
+//     MXC_GPIO_Config(&gpio_cfg_tmr5);
+
+//     MXC_TMR_Init(OST_TIMER, &tmr);
+
+//     MXC_TMR_Start(OST_TIMER);
+
+//     printf("PeriodTicks = %d \n", periodTicks);
+//     printf("Oneshot timer started.\n\n");
+// }
