@@ -16,7 +16,7 @@
 
 // the length of the WAVE file to write to the SD card, a positive integer, long file durations will tale a long time to write
 // max value 4k seconds, about 70 minutes (we will remove this limitation in the final code, limited for the demo for simplicity).
-#define SYS_CONFIG_AUDIO_FILE_LEN_IN_SECONDS (30)
+#define SYS_CONFIG_AUDIO_FILE_LEN_IN_SECONDS (30)  //900
 
 // // comment or uncomment sample rates to add them to the test
 // const Audio_Sample_Rate_t sys_sample_rates_to_test[] = {
@@ -39,7 +39,7 @@ const uint32_t SYS_CONFIG_SAMPLE_RATE = AUDIO_SAMPLE_RATE_384kHz;
 
 // const uint32_t SYS_CONFIG_NUM_BIT_DEPTHS_TO_TEST = sizeof(sys_bit_depths_to_test) / sizeof(sys_bit_depths_to_test[0]);
 
-const uint32_t SYS_CONFIG_NUM_BIT_DEPTH = AUDIO_BIT_DEPTH_24_BITS_PER_SAMPLE;
+const uint32_t SYS_CONFIG_NUM_BIT_DEPTH = AUDIO_BIT_DEPTH_16_BITS_PER_SAMPLE;
 
 // comment of uncomment mono/stereo variations to add them to the test
 // const Wave_Header_Num_Channels_t sys_num_channel_variations_to_test[] = {
@@ -48,7 +48,7 @@ const uint32_t SYS_CONFIG_NUM_BIT_DEPTH = AUDIO_BIT_DEPTH_24_BITS_PER_SAMPLE;
 // };
 
 // const uint32_t SYS_CONFIG_NUM_CHANNEL_VARIATIONS_TO_TEST = sizeof(sys_num_channel_variations_to_test) / sizeof(sys_num_channel_variations_to_test)[0];
-const uint32_t SYS_CONFIG_NUM_CHANNEL = WAVE_HEADER_STEREO;
+const uint32_t SYS_CONFIG_NUM_CHANNEL = WAVE_HEADER_MONO;
 
 
 // in mono mode, we only record one channel, choose it here

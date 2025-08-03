@@ -34,6 +34,10 @@ typedef struct __attribute__((packed))
     uint16_t bits_per_sample;  /* number of bits per sample */
     char data[4];              /* always the string "data" */
     uint32_t data_length;      /* data length in bytes (file_length - the length of this struct) */
+    char pad_to_sector[512-44]; // add 0-valued bytes to sector boundary (512).
+    // Note that (512-44) is divisible by both 2 and 3, so the
+    // word alignment for 16 bits (2 bytes) and 24 bits (3 bytes) will be correct once
+    // the data appears starting at 512
 } Wave_Header_t;
 
 /* Private variables -------------------------------------------------------------------------------------------------*/
@@ -48,6 +52,7 @@ static Wave_Header_t wave_header = {
     .fmt_chunk_size = WAVE_HEADER_FMT_CHUNK_SIZE,
     .fmt_tag = WAVE_HEADER_FMT_TAG_PCM,
     .data = {'d', 'a', 't', 'a'},
+    .pad_to_sector = {0}
 };
 
 const uint32_t HEADER_LENGTH = sizeof(wave_header);

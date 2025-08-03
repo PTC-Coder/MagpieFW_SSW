@@ -1,7 +1,7 @@
 
 /* Private includes --------------------------------------------------------------------------------------------------*/
 
-#include <stdio.h>
+#include <stdio.h>`
 #include <stdint.h>
 #include <string.h>
 
@@ -26,6 +26,8 @@
 #include "gpio.h"
 #include "DS3231_driver.h"
 #include <time.h>
+
+#include "icc.h"
 
 // #include "mxc_device.h"
 // #include "mxc_sys.h"
@@ -75,8 +77,8 @@ static void start_recording(uint8_t number_of_channel, Audio_Sample_Rate_t rate,
 static void user_pushbutton_interrupt_callback(void *cbdata);
 static void setup_user_pushbutton_interrupt(void);
 
-void OneshotTimerHandler(void);
-void OneshotTimer(void);
+//void OneshotTimerHandler(void);
+//void OneshotTimer(void);
 
 
 //#define FIRST_SET_RTC 1    //uncomment this to set the clock time in the setup_realtimeclock()
@@ -101,14 +103,16 @@ const struct tm ds3231_dateTimeDefault = {
 	.tm_sec = 0U
 };
 
+static bool isContinuousRecording = false; //Flag to indicate if the recording is continuous or not
+
 /* Public function definitions ---------------------------------------------------------------------------------------*/
-
-
 int main(void)
 {
 #ifdef TERMINAL_IO_USE_CONSOLE_UART
     bsp_console_uart_init();
 #endif
+
+    MXC_ICC_Enable();
 
     initialize_system();
 
@@ -176,8 +180,12 @@ int main(void)
 
         uint8_t button_state = get_user_pushbutton_state();
 
-        if((BUTTON_STATE_JUST_PRESSED == button_state)||(BUTTON_STATE_PRESSED == button_state))
+        if((BUTTON_STATE_JUST_PRESSED == button_state)||(BUTTON_STATE_PRESSED == button_state)||isContinuousRecording)
+        //if (BUTTON_STATE_PRESSED == button_state)
         {
+            // The first time user pushed the button, we set it to contiounous recording mode
+            isContinuousRecording = true;   //this will get set to false if user interrupts the recording
+
             LED_cascade_left();
             printf("Start recording ...\n");
 
@@ -187,7 +195,7 @@ int main(void)
             // NVIC_DisableIRQ(GPIO0_IRQn);
 
             status_led_set(STATUS_LED_COLOR_GREEN, TRUE);
-            MXC_Delay(MXC_DELAY_MSEC(1000));
+            MXC_Delay(MXC_DELAY_MSEC(20));
             status_led_set(STATUS_LED_COLOR_GREEN, FALSE);
                                
 
@@ -198,20 +206,24 @@ int main(void)
             } else {
                 
                 sprintf(savedFileName,"%s%s","Magpie00_",ds3231_datetime_str);
-                printf("File to be saved: %s /n", savedFileName);
+                printf("File to be saved: %s \n", savedFileName);
             }
 
-            //re-enable button
+            //re-enable button (this is for checking a stop in the middle of recording)
             pushbuttons_init();
             setup_user_pushbutton_interrupt();
 
-            // start_recording(SYS_CONFIG_NUM_CHANNEL, SYS_CONFIG_SAMPLE_RATE,
-            //                 SYS_CONFIG_NUM_BIT_DEPTH,
-            //                 SYS_CONFIG_SD_CARD_SLOT_TO_USE,
-            //                 SYS_CONFIG_AUDIO_FILE_LEN_IN_SECONDS);
+            start_recording(SYS_CONFIG_NUM_CHANNEL, SYS_CONFIG_SAMPLE_RATE,
+                            SYS_CONFIG_NUM_BIT_DEPTH,
+                            SYS_CONFIG_SD_CARD_SLOT_TO_USE,
+                            SYS_CONFIG_AUDIO_FILE_LEN_IN_SECONDS);
             
             
-            printf("Recording Done ...\n");           
+            printf("Recording Done ...\n");    
+            
+            //re-enable button (this is for the next recording)
+            pushbuttons_init();
+            setup_user_pushbutton_interrupt();
 
             printf("Standing by and waiting for a push from user button ...\n");
         }
@@ -317,16 +329,25 @@ void write_wav_file(Wave_Header_Attributes_t *wav_attr, uint32_t file_len_secs)
     ad4630_384kHz_fs_clk_and_cs_start();
     audio_dma_start();
 
-    status_led_set(STATUS_LED_COLOR_GREEN, true); // green led on while recording
+    //status_led_set(STATUS_LED_COLOR_GREEN, true); // green led on while recording
 
     uint32_t num_dma_blocks_consumed = 0;
 
     while (num_dma_blocks_consumed < num_dma_blocks_in_the_file)
-    {
+    {        
+        // check if the user has pressed the button to stop recording
+        uint8_t button_state = get_user_pushbutton_state();       
+    
+
         if (audio_dma_overrun_occured(AUDIO_CHANNEL_0) || audio_dma_overrun_occured(AUDIO_CHANNEL_1))
         {
             printf("[ERROR]--> Audio DMA overrrun\n");
             error_handler(STATUS_LED_COLOR_BLUE);
+              //error_handler(STATUS_LED_COLOR_BLUE);
+            num_dma_blocks_consumed = num_dma_blocks_in_the_file;  // stop recording this run and exit the loop
+
+            //we'll start over with the net
+            break;
         }
 
         if (audio_dma_num_buffers_available(AUDIO_CHANNEL_0) > 0 && audio_dma_num_buffers_available(AUDIO_CHANNEL_1) > 0)
@@ -469,10 +490,18 @@ void write_wav_file(Wave_Header_Attributes_t *wav_attr, uint32_t file_len_secs)
             num_dma_blocks_consumed += 1;
 
             //Blink Green LED while recording
-            if(num_dma_blocks_consumed % 3 == 0)
-            {
-                status_led_toggle(STATUS_LED_COLOR_GREEN);
+            if(num_dma_blocks_consumed % 120 == 0)
+            {                
+                status_led_set(STATUS_LED_COLOR_GREEN, TRUE); // turn the green LED back on
+                MXC_Delay(MXC_DELAY_MSEC(25));
+                status_led_set(STATUS_LED_COLOR_GREEN, FALSE);
             }
+        }
+        
+        if((BUTTON_STATE_JUST_PRESSED == button_state)||(BUTTON_STATE_PRESSED == button_state))
+        {
+            num_dma_blocks_consumed = num_dma_blocks_in_the_file; // stop recording if the button is pressed
+            isContinuousRecording = false; // set the flag to false so that we don't continue recording next time
         }
     }
 
@@ -572,9 +601,9 @@ static void LED_cascade_right(void) //R->G->B
     {
         //Turn each color LED on
         status_led_set(i,TRUE);
-        MXC_Delay(MXC_DELAY_MSEC(250));
+        MXC_Delay(MXC_DELAY_MSEC(20));
     }
-    MXC_Delay(MXC_DELAY_SEC(1));
+    MXC_Delay(MXC_DELAY_MSEC(20));
     status_led_all_off();
 }
 
@@ -585,9 +614,9 @@ static void LED_cascade_left(void) //R<-G<-B
     {
         //Turn each color LED on
         status_led_set(i-1,TRUE);
-        MXC_Delay(MXC_DELAY_MSEC(250));
+        MXC_Delay(MXC_DELAY_MSEC(20));
     }
-    MXC_Delay(MXC_DELAY_SEC(1));
+    MXC_Delay(MXC_DELAY_MSEC(20));
     status_led_all_off();
 }
 
@@ -639,50 +668,10 @@ static void initialize_system(void)
     else
     {
         printf("[SUCCESS]--> 1V8 I2C init\n");
-    }   
-}
+    }  
 
-static void setup_realtimeclock()
-{
-    DS3231_RTC = DS3231_Open();
+    ////////////////////  AUDIO INIT ////////////////////
 
-    if(E_NO_ERROR != DS3231_RTC.init(bsp_i2c_3v3_i2c_handle))
-    {
-      printf("[ERROR] --> Unable to initialize RTC driver.\n");
-      error_handler(STATUS_LED_COLOR_RED);
-    }
-
-    #ifdef FIRST_SET_RTC
-	// //Set Date Time to something
-	//Year is always Year - 1900
-	//Month is 0-11 so subtract 1 from the month you want to set
-	//Time is in UTC so set appropriately
-	// hour is 0-23
-	// min is 0-59
-	// sec is 0-59
-	struct tm newTime = {
-		.tm_year = 2025 - 1900U,
-		.tm_mon =  3 - 1U,
-		.tm_mday = 31,
-		.tm_hour = 10,
-		.tm_min = 01,
-		.tm_sec = 0
-	};
-
-	
-	//Set Date Time on RTC. 
-	
-	if (E_NO_ERROR != DS3231_RTC.set_datetime(&newTime)) {
-		printf("\nDS3231 set time error\n");
-	} else {
-		strftime((char*)output_msgBuffer, OUTPUT_MSG_BUFFER_SIZE, "\n-->Set DateTime: %F %TZ\r\n", &newTime);
-		printf(output_msgBuffer);
-	}
-	#endif
-}
-
-static void power_on_audio_chain(void)
-{
     if (afe_control_init() != E_NO_ERROR)
     {
         printf("[ERROR]--> AFE Control init\n");
@@ -692,7 +681,6 @@ static void power_on_audio_chain(void)
     {
         printf("[SUCCESS]--> AFE Control init\n");
     }
-
     if (afe_control_enable(AUDIO_CHANNEL_0) != E_NO_ERROR)
     {
         printf("[ERROR]--> AFE Control CH0 EN\n");
@@ -711,7 +699,6 @@ static void power_on_audio_chain(void)
     {
         printf("[SUCCESS]--> AFE Control CH1 EN\n");
     }
-
     if (afe_control_set_gain(AUDIO_CHANNEL_0, SYS_CONFIG_AUDIO0_GAIN) != E_NO_ERROR)
     {
         printf("[ERROR]--> AFE Control CH0 gain set to %ddB\n", SYS_CONFIG_AUDIO0_GAIN);
@@ -751,39 +738,8 @@ static void power_on_audio_chain(void)
     {
         printf("[SUCCESS]--> AFE CH1 get-gain matches AFE set-gain\n");
     }
-}
 
-static void power_off_audio_chain(void)
-{
-
-    if (afe_control_disable(AUDIO_CHANNEL_0) != E_NO_ERROR)
-    {
-        printf("[ERROR]--> AFE Control CH0 DIS\n");
-        error_handler(STATUS_LED_COLOR_RED);
-    }
-    else
-    {
-        printf("[SUCCESS]--> AFE Control CH0 DIS\n");
-    }
-
-    if (afe_control_disable(AUDIO_CHANNEL_1) != E_NO_ERROR)
-    {
-        printf("[ERROR]--> AFE Control CH1 DIS\n");
-        error_handler(STATUS_LED_COLOR_RED);
-    }
-    else
-    {
-        printf("[SUCCESS]--> AFE Control CH0 DIS\n");
-    }
-
-    bsp_power_off_LDOs();
-}
-
-static void start_recording(uint8_t number_of_channel, 
-    Audio_Sample_Rate_t rate, Audio_Bits_Per_Sample_t bit, 
-                            SD_Card_Bank_Card_Slot_t sd_slot, int32_t duration_s)
-{
-    power_on_audio_chain();
+    //////////////// SD CARD INIT /////////////////////
 
     if (sd_card_bank_ctl_init() != E_NO_ERROR)
     {
@@ -794,6 +750,86 @@ static void start_recording(uint8_t number_of_channel,
     {
         printf("[SUCCESS]--> SD card bank ctl init\n");
     }
+   
+}
+
+static void setup_realtimeclock()
+{
+    DS3231_RTC = DS3231_Open();
+
+    if(E_NO_ERROR != DS3231_RTC.init(bsp_i2c_3v3_i2c_handle))
+    {
+      printf("[ERROR] --> Unable to initialize RTC driver.\n");
+      error_handler(STATUS_LED_COLOR_RED);
+    }
+
+    //only do this if the clock has never been set before
+    #ifdef FIRST_SET_RTC
+	// //Set Date Time to something
+	//Year is always Year - 1900
+	//Month is 0-11 so subtract 1 from the month you want to set
+	//Time is in UTC so set appropriately
+	// hour is 0-23
+	// min is 0-59
+	// sec is 0-59
+	struct tm newTime = {
+		.tm_year = 2025 - 1900U,
+		.tm_mon =  4 - 1U,
+		.tm_mday = 25,
+		.tm_hour = 16,
+		.tm_min = 06,
+		.tm_sec = 0
+	};
+
+	
+	//Set Date Time on RTC. 
+	
+	if (E_NO_ERROR != DS3231_RTC.set_datetime(&newTime)) {
+		printf("\nDS3231 set time error\n");
+	} else {
+		strftime((char*)output_msgBuffer, OUTPUT_MSG_BUFFER_SIZE, "\n-->Set DateTime: %F %TZ\r\n", &newTime);
+		printf(output_msgBuffer);
+	}
+	#endif
+}
+
+static void power_on_audio_chain(void)
+{
+    bsp_power_on_LDOs();            
+}
+
+static void power_off_audio_chain(void)
+{
+
+    // if (afe_control_disable(AUDIO_CHANNEL_0) != E_NO_ERROR)
+    // {
+    //     printf("[ERROR]--> AFE Control CH0 DIS\n");
+    //     error_handler(STATUS_LED_COLOR_RED);
+    // }
+    // else
+    // {
+    //     printf("[SUCCESS]--> AFE Control CH0 DIS\n");
+    // }
+
+    // if (afe_control_disable(AUDIO_CHANNEL_1) != E_NO_ERROR)
+    // {
+    //     printf("[ERROR]--> AFE Control CH1 DIS\n");
+    //     error_handler(STATUS_LED_COLOR_RED);
+    // }
+    // else
+    // {
+    //     printf("[SUCCESS]--> AFE Control CH0 DIS\n");
+    // }
+
+    bsp_power_off_LDOs();
+}
+
+static void start_recording(uint8_t number_of_channel, 
+    Audio_Sample_Rate_t rate, Audio_Bits_Per_Sample_t bit, 
+                            SD_Card_Bank_Card_Slot_t sd_slot, int32_t duration_s)
+{
+    
+    //power_on_audio_chain();
 
     sd_card_bank_ctl_enable_slot(sd_slot);
 
@@ -820,12 +856,34 @@ static void start_recording(uint8_t number_of_channel,
     }
 
     // without a brief delay between card init and mount, there are often mount errors
-    MXC_Delay(100000);
+    MXC_Delay(100000);  // 100ms delay
+    //MXC_DELAY_MSEC(200);
+
+    int sd_card_mount_result = sd_card_mount();
+    printf("[INFO]--> SD card mount result: %d\n", sd_card_mount_result);
 
     if (sd_card_mount() != E_NO_ERROR)
     {
-        printf("[ERROR]--> SD card mount\n");
-        error_handler(STATUS_LED_COLOR_RED);
+        printf("[ERROR]--> SD card mount.  Extend 50ms wait time ... \n");
+        MXC_DELAY_MSEC(50);
+        if (sd_card_mount() != E_NO_ERROR)
+        {
+            printf("[ERROR]--> SD card mount failed again.  Extend 50ms wait time.\n");
+            MXC_DELAY_MSEC(50);
+            if (sd_card_mount() != E_NO_ERROR)
+            {
+                printf("[ERROR]--> SD card mount failed again.  Giving up.\n");
+                error_handler(STATUS_LED_COLOR_RED);
+            }
+            else
+            {
+                printf("[SUCCESS]--> SD card mounted after 150 ms wait\n");
+            }
+        }
+        else
+        {
+            printf("[SUCCESS]--> SD card mounted after 100 ms extended wait\n");
+        }
     }
     else
     {
@@ -854,7 +912,7 @@ static void start_recording(uint8_t number_of_channel,
 
     printf("\n[SUCCESS]--> All files recorded, shutting down\n");
 
-    power_off_audio_chain();
+    //power_off_audio_chain();
 }
 
 ///////////////////////////ISP CALL BACKS ////////////////////////////////////
@@ -872,7 +930,7 @@ static void user_pushbutton_interrupt_callback(void *cbdata)
 
     // Start the debounce timer which should produce "button_pressed" after some time after
     // checking the GPIO pin
-    start_user_btn_debounceTimer();
+    start_user_btn_debounceTimer();  //re-activate one shot timer
     
 }
 

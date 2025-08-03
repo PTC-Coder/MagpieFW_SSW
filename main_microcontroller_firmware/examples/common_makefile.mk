@@ -27,8 +27,8 @@ BOARD = BSP
 
 PROJ_CFLAGS+=-mno-unaligned-access
 
-#MXC_OPTIMIZE_CFLAGS = -O2
-DEBUG = 1
+MXC_OPTIMIZE_CFLAGS = -O2
+#DEBUG = 1
 
 # do manual pin config, don't use the pin constants in msdk/Libraries/PeriphDrivers/Source/SYS/pins_me14.c
 # this means we need to explicitly set up all the pins for the peripherals we use

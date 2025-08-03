@@ -126,7 +126,7 @@ Button_State_t ble_enable_pushbutton_state()
 static void usr_btn_debounce_timer_handler()  
 {    
     // Stop timer
-    MXC_TMR_ClearFlags(USRBTN_TIMER_ID);
+    MXC_TMR_ClearFlags(USRBTN_TIMER_ID);   //clear timer
 
     if (!gpio_read_pin(&bsp_pins_user_pushbutton_cfg))  //read if button is pulled low (i.e. pushed)
     {
