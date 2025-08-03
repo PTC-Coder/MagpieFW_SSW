@@ -225,7 +225,7 @@ int main(void)
             pushbuttons_init();
             setup_user_pushbutton_interrupt();
 
-            printf("Standing by and waiting for a push from user button ...\n");
+            printf("Standing by and waiting for a push from user button or a Continue Signal ...\n\n");
         }
     }
 }
@@ -326,10 +326,17 @@ void write_wav_file(Wave_Header_Attributes_t *wav_attr, uint32_t file_len_secs)
     uint32_t chunk_packing_idx = 0;
     uint32_t total_num_bytes_in_the_buff = 0;
 
+    printf("[Info]--> Start ADC clock and DMA. Recording for %d sec(s) ... \n", file_len_secs);
+
+    status_led_set(STATUS_LED_COLOR_GREEN, true); // green led on
+
+
     ad4630_384kHz_fs_clk_and_cs_start();
     audio_dma_start();
 
     //status_led_set(STATUS_LED_COLOR_GREEN, true); // green led on while recording
+
+
 
     uint32_t num_dma_blocks_consumed = 0;
 
@@ -342,10 +349,11 @@ void write_wav_file(Wave_Header_Attributes_t *wav_attr, uint32_t file_len_secs)
         if (audio_dma_overrun_occured(AUDIO_CHANNEL_0) || audio_dma_overrun_occured(AUDIO_CHANNEL_1))
         {
             printf("[ERROR]--> Audio DMA overrrun\n");
-            error_handler(STATUS_LED_COLOR_BLUE);
+            //error_handler(STATUS_LED_COLOR_BLUE);
               //error_handler(STATUS_LED_COLOR_BLUE);
             num_dma_blocks_consumed = num_dma_blocks_in_the_file;  // stop recording this run and exit the loop
-
+            audio_dma_clear_overrun(AUDIO_CHANNEL_0);
+            audio_dma_clear_overrun(AUDIO_CHANNEL_1);
             //we'll start over with the net
             break;
         }
@@ -502,6 +510,12 @@ void write_wav_file(Wave_Header_Attributes_t *wav_attr, uint32_t file_len_secs)
         {
             num_dma_blocks_consumed = num_dma_blocks_in_the_file; // stop recording if the button is pressed
             isContinuousRecording = false; // set the flag to false so that we don't continue recording next time
+            
+            printf("[INFO]--> User interrupted recording.  End recording ....\n");
+            status_led_set(STATUS_LED_COLOR_BLUE, TRUE); // turn the green LED back on
+            // MXC_Delay(MXC_DELAY_MSEC(250));
+            // status_led_set(STATUS_LED_COLOR_BLUE, FALSE);
+
         }
     }
 
@@ -897,7 +911,7 @@ static void start_recording(uint8_t number_of_channel,
     };
                          
     write_wav_file(&wav_attr, duration_s);
-    MXC_Delay(500000);
+    //MXC_Delay(500000);  //Delay 500 ms 
 
 
     if (sd_card_unmount() != E_NO_ERROR)
@@ -910,7 +924,7 @@ static void start_recording(uint8_t number_of_channel,
         printf("[SUCCESS]--> SD card unmounted\n");
     }
 
-    printf("\n[SUCCESS]--> All files recorded, shutting down\n");
+    printf("[SUCCESS]--> All files recorded, shutting down\n");
 
     //power_off_audio_chain();
 }
