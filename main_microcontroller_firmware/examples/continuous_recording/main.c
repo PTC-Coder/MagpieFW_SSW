@@ -153,6 +153,13 @@ int main(void)
 
         //printf(ds3231_datetime_str);		
     }
+
+    printf("Build configuration check:\n");
+#ifdef NATIVE_SDHC
+    printf("NATIVE_SDHC is defined as: %d\n", NATIVE_SDHC);
+#else
+    printf("NATIVE_SDHC is NOT defined\n");
+#endif
    
     printf("Standing by and waiting for a push from user button ...\n");
 

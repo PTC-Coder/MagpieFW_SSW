@@ -68,3 +68,4 @@ VPATH += ../../third_party/minmea/
 PROJ_CFLAGS += -Dtimegm=mktime # needed for the minmea lib
 
 PROJ_LDFLAGS += -Wl,--print-memory-usage
+PROJ_CFLAGS += -DNATIVE_SDHC=1
