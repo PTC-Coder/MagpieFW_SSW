@@ -13,7 +13,7 @@
 
 /* Private defines ---------------------------------------------------------------------------------------------------*/
 
-#define SD_CARD_INIT_NUM_RETRIES (100)
+#define SD_CARD_INIT_NUM_RETRIES (20)
 
 #define SDHC_CONFIG_BLOCK_GAP (0)
 #define SDHC_CONFIG_CLK_DIV (0x0b0)
@@ -23,7 +23,7 @@
 static FATFS *fs; // FFat Filesystem Object
 static FATFS fs_obj;
 static FIL SD_file; // FFat File Object
-static bool is_mounted;
+static bool is_mounted = false;
 
 static char volume = '0';
 
@@ -73,7 +73,7 @@ bool sd_card_is_mounted()
     return is_mounted;
 }
 
-uint32_t sd_card_disk_size_bytes()
+QWORD sd_card_disk_size_bytes()
 {
     if (!sd_card_is_mounted())
     {
@@ -81,26 +81,27 @@ uint32_t sd_card_disk_size_bytes()
     }
 
     // from elm-chan: http://elm-chan.org/fsw/ff/doc/getfree.html
-    const uint32_t total_sectors = (fs->n_fatent - 2) * fs->csize;
-    return total_sectors / 2;
+    DWORD total_sectors = (fs->n_fatent - 2) * fs->csize;
+    
+    return ((QWORD)(total_sectors / 2) * (QWORD)(1024)); // for cards over 3GB, we need QWORD to hold size
 }
 
-uint32_t sd_card_free_space_bytes()
+QWORD sd_card_free_space_bytes()
 {
     if (!sd_card_is_mounted())
     {
         return 0;
     }
 
-    // from elm-chan: http://elm-chan.org/fsw/ff/doc/getfree.html
-    uint32_t free_clusters;
+    // from e]lm-chan: http://elm-chan.org/fsw/ff/doc/getfree.html
+    QWORD free_clusters;
     if (f_getfree(&volume, &free_clusters, &fs) != FR_OK)
     {
         return 0;
     }
 
-    const uint32_t free_sectors = free_clusters * fs->csize;
-    return free_sectors / 2;
+    DWORD free_sectors = free_clusters * fs->csize;
+    return ((QWORD)(free_sectors / 2) * (QWORD)(1024));
 }
 
 int sd_card_mkdir(const char *path)

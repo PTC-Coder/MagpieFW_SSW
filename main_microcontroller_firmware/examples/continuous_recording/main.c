@@ -885,31 +885,22 @@ static void start_recording(uint8_t number_of_channel,
 
     if (sd_card_mount() != E_NO_ERROR)
     {
-        printf("[ERROR]--> SD card mount.  Extend 50ms wait time ... \n");
-        MXC_DELAY_MSEC(50);
-        if (sd_card_mount() != E_NO_ERROR)
-        {
-            printf("[ERROR]--> SD card mount failed again.  Extend 50ms wait time.\n");
-            MXC_DELAY_MSEC(50);
-            if (sd_card_mount() != E_NO_ERROR)
-            {
-                printf("[ERROR]--> SD card mount failed again.  Giving up.\n");
-                error_handler(STATUS_LED_COLOR_RED);
-            }
-            else
-            {
-                printf("[SUCCESS]--> SD card mounted after 150 ms wait\n");
-            }
-        }
-        else
-        {
-            printf("[SUCCESS]--> SD card mounted after 100 ms extended wait\n");
-        }
+       
+        printf("[ERROR]--> SD card mount failed.\n");
+
+        error_handler(STATUS_LED_COLOR_RED);            
     }
     else
     {
         printf("[SUCCESS]--> SD card mounted\n");
+        QWORD disk_size =  sd_card_disk_size_bytes();
+        QWORD disk_free = sd_card_free_space_bytes();
+        printf("[INFO]--> SD card Total Space: %llu Bytes\n", disk_size);
+        printf("[INFO]--> SD card Free Space: %llu Bytes\n", disk_free);
+        
     }
+
+    
 
     Wave_Header_Attributes_t wav_attr = {
         .num_channels =  number_of_channel,

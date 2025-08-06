@@ -73,14 +73,14 @@ bool sd_card_is_mounted(void);
  *
  * @retval the size of the mounted SD card in bytes, or zero if there is no card mounted or an error occurs.
  */
-uint32_t sd_card_disk_size_bytes(void);
+QWORD sd_card_disk_size_bytes(void);
 
 /**
  * @brief `sd_card_free_space_bytes()` is the number of bytes of free space on the currently mounted SD card.
  *
  * @retval the number of free bytes on the mounted SD card, or zero if there is no card mounted or an error occurs.
  */
-uint32_t sd_card_free_space_bytes(void);
+QWORD sd_card_free_space_bytes(void);
 
 /**
  * @brief `sd_card_mkdir(p)` creates a new directory on the currently mounted SD card at directory path `p`.
